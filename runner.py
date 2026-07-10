@@ -1,8 +1,24 @@
 import os
+import sys
 import logging
+from dotenv import load_dotenv
 from PIL import Image
-from rag_generator import RAGGenerator
 from typing import Dict, List, Tuple
+
+# Load .env before validating required environment variables
+load_dotenv()
+
+# Fail fast with a clear message instead of a stack trace if required
+# env vars are missing (see .env.example).
+REQUIRED_ENV = ["OPENAI_API_KEY"]
+_missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+if _missing:
+    sys.exit(
+        f"Missing required environment variables: {', '.join(_missing)}\n"
+        "Copy .env.example to .env and fill in the values."
+    )
+
+from rag_generator import RAGGenerator
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

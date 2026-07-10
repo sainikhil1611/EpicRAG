@@ -1,13 +1,29 @@
 import os
 import logging
+from dotenv import load_dotenv
 from PIL import Image
-from rag_generator import RAGGenerator
 from typing import Dict, List, Tuple
 import streamlit as st
+
+# Load .env before validating required environment variables
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Fail fast with a clear message instead of a stack trace if required
+# env vars are missing (see .env.example).
+REQUIRED_ENV = ["OPENAI_API_KEY"]
+_missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+if _missing:
+    st.error(
+        f"Missing required environment variables: {', '.join(_missing)}\n\n"
+        "Copy `.env.example` to `.env` and fill in the values."
+    )
+    st.stop()
+
+from rag_generator import RAGGenerator
 
 class StreamlitRAGInterface:
     def __init__(self):
