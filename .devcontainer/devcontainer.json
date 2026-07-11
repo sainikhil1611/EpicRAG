@@ -1,0 +1,6 @@
+{
+  "name": "EpicRAG",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  "postCreateCommand": "pip install --user -r requirements.txt",
+  "forwardPorts": [8501]
+}
