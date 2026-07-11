@@ -11,7 +11,6 @@ chroma_db/
 agents.py
 main_crew.py
 runner_agentic.py
-rag_generator.py
 test_tool.ipynb
 runner_agentic_cli.py
 rag_generator_literacy.py
