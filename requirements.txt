@@ -1,7 +1,5 @@
 pillow==10.2.0
 python-dotenv==1.0.1
-pathlib==1.0.1
-typing==3.7.4.3
 chromadb==0.4.22
 tqdm==4.66.2
 transformers==4.57.6
