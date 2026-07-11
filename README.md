@@ -1,184 +1,108 @@
-## How to run
-1. Create and activate a Python virtual environment (recommended)
-2. Install requirements:
-   pip install -r requirements.txt
+# EpicRAG
 
----
+A multimodal Retrieval-Augmented Generation (RAG) system for corporate documents (e.g. annual reports). It extracts text and images from a source PDF, embeds text locally with a SentenceTransformer model and classifies/OCRs images with CLIP + EasyOCR, stores everything in a local ChromaDB vector store, and answers questions with OpenAI's `gpt-4o-mini` (including a calculator tool for financial math). Two entry points: a terminal REPL (`runner.py`) and a Streamlit web UI (`runner_st.py`).
 
-1. Place your PDF document in the project root directory
-2. Run the PDF processor:
-   python `pdf_processor.py`
+## Quick start (devcontainer — recommended)
 
-This will:
-   - Extract text and split into chunks (saved in /data)
-   - Extract images (saved in /pic_data)
+1. Prereqs: [Docker](https://docs.docker.com/get-docker/), [VS Code](https://code.visualstudio.com/) + the "Dev Containers" extension.
+2. Open this folder in VS Code → "Reopen in Container" when prompted.
+3. `cp .env.example .env` and fill in `OPENAI_API_KEY` (see table below).
+4. Build the vector database (see [Regenerating the vector database](#regenerating-the-vector-database) — one-time, no key needed for this step).
+5. Run: `streamlit run runner_st.py --server.headless true` → open http://localhost:8501
+   (or `python runner.py` for the terminal REPL — needs `OPENAI_API_KEY`).
 
----
+## Manual setup (no devcontainer)
 
-1. Run the embeddings processor:
-2. python `embeddings_processor.py`
-
-This will:
-- Create embeddings for text chunks
-- Store embeddings in ChromaDB
-
----
-
-Run the terminal interface:
-python `runner.py`
-
-You can:
-- Type your questions about the document
-- Type 'help' to see available commands
-- Type 'exit' to quit
-
----
-
-# Multimodal RAG System
-
-A Retrieval-Augmented Generation (RAG) system that can process and query both text and images from corporate documents.
-
-## Overview
-
-This project implements a multimodal RAG system that:
-1. Extracts and processes text and images from PDF documents
-2. Embeds text and images into vector space using Google's embedding models
-3. Stores embeddings in ChromaDB vector database
-4. Retrieves relevant content based on user queries
-5. Generates coherent responses using Mistral AI
-
-## System Architecture
-
-```
-User Query → Multimodal Retriever → RAG Generator → User Response
-                  ↑                        ↑
-              ChromaDB ← Embeddings Processor
-                  ↑
-      Text Files & Images ← PDF Processor
-                  ↑
-          Source Documents
-```
-
-## Components
-
-### PDF Processing & Embedding
-- **pdf_processor.py**: Extracts text content from PDFs and splits into chunks
-- **pic_record.py**: Extracts images from PDF files
-- **embeddings_processor.py**: Creates embeddings for text using Google's embedding models
-
-### Retrieval & Generation
-- **multimodal_retriever.py**: Handles multimodal queries across text and image collections
-- **rag_generator.py**: Takes retrieval results and generates responses using Mistral AI
-- **retriever.py**: Simple text-only retrieval functions (legacy)
-
-### User Interface & Evaluation
-- **gradio_interface.py**: Web interface using Gradio for interacting with the system
-- **evaluation.py**: Tools to evaluate system performance
-- **optimization.py**: Parameter optimization to fine-tune the system
-
-## Getting Started
-
-### Prerequisites
-- Python 3.8+
-- Required packages (see requirements.txt)
-- API keys:
-  - Google AI API key (for embeddings)
-  - Mistral AI API key (for LLM)
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
 ```bash
+python3.12 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-```
-3. Create a `.env` file with your API keys:
-```
-GOOGLE_API_KEY=your_google_ai_key
-MISTRAL_API_KEY=your_mistral_ai_key
+cp .env.example .env   # fill in OPENAI_API_KEY
 ```
 
-### Usage
-
-#### Processing Documents
-
-Process a PDF document to extract text and images:
+Then run either entry point:
 
 ```bash
-python pdf_processor.py --input yourfile.pdf
-python pic_record.py --input yourfile.pdf
+python runner.py                                                    # CLI, needs OPENAI_API_KEY
+streamlit run runner_st.py --server.headless true                   # web UI on :8501, needs OPENAI_API_KEY
 ```
 
-Generate embeddings and store in ChromaDB:
+## Regenerating the vector database
+
+`chroma_db/` is **not committed** (it's gitignored) — it must be built locally before either
+entry point works, because it holds the embeddings ChromaDB needs to answer queries. The source
+material (`data/` — extracted text chunks + the original PDF, and `pic_data/` — extracted page
+images) *is* committed, so regeneration is a single command against data already in the repo:
 
 ```bash
 python embeddings_processor.py
 ```
 
-#### Query the System
+This reads every `data/text_*_*.txt` and `pic_data/page_*_img_*.png`, embeds text locally with
+`sentence-transformers/all-mpnet-base-v2`, classifies/OCRs images with CLIP + EasyOCR, and writes
+a fresh `chroma_db/` directory. **This step does not require `OPENAI_API_KEY`** — all embedding
+models run locally — but it does need outbound network access on first run to download the
+SentenceTransformer, CLIP, and EasyOCR models from Hugging Face (roughly 1GB+, cached afterward
+in the container/host's Hugging Face cache dir). Verified: this command runs end-to-end without
+any API key and produces a `chroma_db/` that `multimodal_retriever.py`'s `MultimodalRetriever()`
+can load cleanly with the pinned `chromadb==0.4.22` client.
 
-Launch the web interface:
-
-```bash
-python gradio_interface.py
-```
-
-Or use the system programmatically:
-
-```python
-from rag_generator import RAGGenerator
-
-generator = RAGGenerator()
-result = generator.generate_answer("What were the financial highlights from the last fiscal year?")
-print(result['answer'])
-```
-
-#### Evaluate and Optimize
-
-Run evaluation:
+To regenerate `data/`/`pic_data/` from a different source PDF instead of reusing what's already
+committed, run this first:
 
 ```bash
-python evaluation.py
+python pdf_processor.py --input path/to/your.pdf
 ```
 
-Fine-tune parameters:
+Only `OPENAI_API_KEY` gates anything — it's required the moment you *query* the system
+(`runner.py` / `runner_st.py`, both of which instantiate `RAGGenerator`), not for ingestion or
+embedding. Both entry points validate the key up front and exit/error cleanly (no stack trace) if
+it's missing.
 
-```bash
-python optimization.py
-```
+## Environment variables
 
-## System Optimization
+| Variable | Required | Purpose | Where to get it |
+|---|---|---|---|
+| `OPENAI_API_KEY` | Yes | Chat completion (`gpt-4o-mini`) with a calculator tool for financial math, used by `rag_generator.py` to answer queries | https://platform.openai.com/api-keys |
 
-For optimal performance, the system can be tuned with these parameters:
-- Number of text chunks to retrieve (default: 5)
-- Number of images to retrieve (default: 3)
-- LLM temperature (default: 0.1)
+No other environment variables are read by any code in this repo.
 
-Run the optimization script to find the best parameters for your specific data.
+## Testing
 
-## Extending the System
+No automated test suite exists for this project. Verification performed:
+- `python -m compileall -q .` — all files syntax-clean.
+- Clean-venv install + import check on Python 3.12.8 for every module (`pdf_processor`,
+  `embeddings_processor`, `multimodal_retriever`, `rag_generator`, `runner`, `runner_st`),
+  confirming `import fitz` resolves to PyMuPDF.
+- `python embeddings_processor.py` run end-to-end against the committed `data/`/`pic_data/`
+  (no API key) — builds a working `chroma_db/` and confirms `MultimodalRetriever()` loads it.
+- Missing-`OPENAI_API_KEY` path exercised for both `runner.py` (clean exit code 1, no traceback)
+  and `runner_st.py` (`st.error` + `st.stop`, no traceback).
+- Docker image build + container start on port 8501; devcontainer `up` + `exec compileall`.
+- **Not verified**: an actual OpenAI-backed query/answer round trip — no live API key was used
+  in this environment. The `OPENAI_API_KEY` validation path (missing-key → clean error) is
+  verified; the happy path (key present → real answer) is not.
 
-### Adding New Document Types
-- Implement new document processors that output text chunks and images
-- Process these through the embedding pipeline
+## Deployment
 
-### Using Different Models
-- Modify the embedding functions in `embeddings_processor.py`
-- Change the LLM in `rag_generator.py`
+Build the production image: `docker build -t epicrag .`
+Run it: `docker run --env-file .env -p 8501:8501 -v $(pwd)/chroma_db:/app/chroma_db epicrag`
+(the volume mount persists the regenerated vector DB across container restarts — without it,
+run `python embeddings_processor.py` again inside the container after each fresh start).
+This container runs on any host (Fly.io, Render, a VPS with Docker) — see
+[DEPLOYMENT.md](../DEPLOYMENT.md) in the Projects root for the full walkthrough.
 
-## Limitations
+## Known limitations
 
-- The system currently only handles PDF documents
-- Image understanding is limited by the quality of embeddings
-- Performance depends on the quality and relevance of the source documents
-
-## Future Improvements
-
-- Implement CLIP or other specialized multimodal embedding models
-- Add support for more document types (Word, PPT, etc.)
-- Implement user feedback loop for continuous improvement
-- Add caching mechanisms for frequently asked questions
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+- `chroma_db/` must be regenerated locally (see above) — it is not shipped in the image or repo.
+- The vector DB is on-disk inside the container by default; without a mounted volume it's lost on
+  container restart and must be rebuilt via `python embeddings_processor.py`.
+- First run of ingestion/embedding needs outbound network access to download ~1GB+ of ML models
+  (SentenceTransformer, CLIP, EasyOCR) from Hugging Face; subsequent runs use the local cache.
+- CLIP/EasyOCR/SentenceTransformer run on CPU unless CUDA is available — expect ingestion to be
+  slow (OCR is the bottleneck) on a machine/container without a GPU.
+- The local (untracked, gitignored) `.env` on the original dev machine contains five additional
+  API keys (`MISTRAL_API_KEY`, `GOOGLE_API_KEY`, `HUGGINGFACE_API_KEY`, `SERPER_API_KEY`,
+  `GROQ_API_KEY`) that are leftovers from a larger, since-stripped-down project — no code in this
+  repo reads them, so they are intentionally omitted from `.env.example`.
+- No automated test suite exists; see Testing above for what was manually verified.
